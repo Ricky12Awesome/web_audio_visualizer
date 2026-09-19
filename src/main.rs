@@ -1,25 +1,94 @@
 use macroquad::prelude::*;
 use serde::{Deserialize, Serialize};
+use std::sync::atomic::{AtomicU32, Ordering};
 
 #[derive(Serialize, Deserialize)]
 pub struct Config {
     enabled: bool,
-    // more settings will be added in future
 }
 
-#[cfg(target_arch = "wasm32")]
-#[link(wasm_import_module = "env")]
-unsafe extern "C" {
+#[repr(C)]
+pub struct AudioBufferState {
+    sequence: AtomicU32,
+    frames_written: AtomicU32,
+    channels: AtomicU32,
+    frames: AtomicU32,
+}
 
+struct AudioBuffer {
+    samples: Vec<f32>,
+    state: Box<AudioBufferState>,
+}
+
+static mut AUDIO_BUFFER: *mut AudioBuffer = std::ptr::null_mut();
+
+#[unsafe(no_mangle)]
+pub extern "C" fn audio_buffer_init(channels: u32, frames: u32) -> *mut f32 {
+    let mut buffer = AudioBuffer {
+        samples: vec![0.0; channels.saturating_mul(frames) as usize],
+        state: Box::new(AudioBufferState {
+            sequence: AtomicU32::new(0),
+            frames_written: AtomicU32::new(0),
+            channels: AtomicU32::new(channels),
+            frames: AtomicU32::new(frames),
+        }),
+    };
+    let samples = buffer.samples.as_mut_ptr();
+    unsafe {
+        AUDIO_BUFFER = Box::into_raw(Box::new(buffer));
+    }
+    samples
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn audio_buffer_state() -> *mut AudioBufferState {
+    unsafe {
+        let buffer = AUDIO_BUFFER;
+        if buffer.is_null() {
+            std::ptr::null_mut()
+        } else {
+            (*buffer).state.as_mut()
+        }
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn audio_buffer_samples() -> *mut f32 {
+    unsafe {
+        let buffer = AUDIO_BUFFER;
+        if buffer.is_null() {
+            std::ptr::null_mut()
+        } else {
+            (*buffer).samples.as_mut_ptr()
+        }
+    }
+}
+
+fn audio_level() -> f32 {
+    let buffer = unsafe { AUDIO_BUFFER.as_ref() };
+    let Some(buffer) = buffer else { return 0.0 };
+    let sequence = buffer.state.sequence.load(Ordering::Acquire);
+    if sequence % 2 != 0 {
+        return 0.0;
+    }
+    let sum = buffer
+        .samples
+        .iter()
+        .map(|sample| sample.abs())
+        .sum::<f32>();
+    if sequence != buffer.state.sequence.load(Ordering::Acquire) {
+        return 0.0;
+    }
+    let count = buffer.state.channels.load(Ordering::Relaxed)
+        * buffer.state.frames_written.load(Ordering::Relaxed);
+    if count == 0 { 0.0 } else { sum / count as f32 }
 }
 
 #[macroquad::main("Web Audio Visualizer")]
 async fn main() {
     loop {
         clear_background(Color::from_rgba(0, 0, 0, 0));
-
-        draw_text("", 20., 20., 32., WHITE);
-
-        next_frame().await
+        draw_text(&format!("{:.3}", audio_level()), 20., 40., 32., WHITE);
+        next_frame().await;
     }
 }

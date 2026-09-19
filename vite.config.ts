@@ -69,4 +69,6 @@ function rustWasmHotReload(): Plugin {
 
 export default defineConfig({
   plugins: [rustWasmHotReload()],
+  server: { headers: { "Cross-Origin-Embedder-Policy": "credentialless", "Cross-Origin-Opener-Policy": "same-origin" } },
+  preview: { headers: { "Cross-Origin-Embedder-Policy": "credentialless", "Cross-Origin-Opener-Policy": "same-origin" } },
 });
