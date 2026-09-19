@@ -25,10 +25,18 @@ class Capture extends AudioWorkletProcessor {
         this.port.postMessage({ type: "ready" });
     }
 
-    process(inputs: Float32Array[][]) {
+    process(inputs: Float32Array[][], outputs: Float32Array[][]) {
         const channels = inputs[0];
+        const output = outputs[0];
         const frames = channels?.[0]?.length ?? 0;
         const channelCount = channels?.length ?? 0;
+
+        for (let channel = 0; channel < output.length; channel += 1) {
+            const input = channels?.[channel];
+            if (input === undefined) output[channel].fill(0);
+            else output[channel].set(input);
+        }
+
         if (frames === 0 || channelCount === 0) return true;
 
         if (!this.configured) {
