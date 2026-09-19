@@ -1,6 +1,8 @@
 use macroquad::prelude::*;
 
 const SAMPLE_COUNT: usize = 1024;
+const NORMALIZED_PEAK: f32 = 0.9;
+const SILENCE_THRESHOLD: f32 = 0.0001;
 
 #[cfg(target_arch = "wasm32")]
 #[link(wasm_import_module = "env")]
@@ -29,6 +31,23 @@ fn update_audio_samples(samples: &mut [f32]) -> bool {
     }
 }
 
+fn normalize_audio_samples(samples: &mut [f32]) {
+    let peak = samples
+        .iter()
+        .map(|sample| sample.abs())
+        .fold(0.0_f32, f32::max);
+
+    if peak < SILENCE_THRESHOLD {
+        samples.fill(0.0);
+        return;
+    }
+
+    let gain = NORMALIZED_PEAK / peak;
+    for sample in samples {
+        *sample *= gain;
+    }
+}
+
 #[macroquad::main("Web Audio Visualizer")]
 async fn main() {
     let mut samples = vec![0.0; SAMPLE_COUNT];
@@ -37,6 +56,8 @@ async fn main() {
         clear_background(BLACK);
 
         if update_audio_samples(&mut samples) {
+            normalize_audio_samples(&mut samples);
+
             let width = screen_width();
             let height = screen_height();
             let center_y = height * 0.5;
@@ -57,5 +78,32 @@ async fn main() {
         }
 
         next_frame().await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn volume_does_not_change_normalized_waveform() {
+        let mut quiet = [-0.1, -0.05, 0.0, 0.05, 0.1];
+        let mut loud = [-1.0, -0.5, 0.0, 0.5, 1.0];
+
+        normalize_audio_samples(&mut quiet);
+        normalize_audio_samples(&mut loud);
+
+        for (quiet_sample, loud_sample) in quiet.iter().zip(loud) {
+            assert!((quiet_sample - loud_sample).abs() < 0.000001);
+        }
+    }
+
+    #[test]
+    fn near_silence_is_not_amplified() {
+        let mut samples = [0.00001, -0.00001];
+
+        normalize_audio_samples(&mut samples);
+
+        assert_eq!(samples, [0.0, 0.0]);
     }
 }
