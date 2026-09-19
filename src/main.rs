@@ -2,7 +2,7 @@ use macroquad::prelude::*;
 use serde::{Deserialize, Serialize};
 
 #[cfg(target_arch = "wasm32")]
-const SAMPLE_COUNT: usize = 1024;
+const SAMPLE_COUNT: usize = 16384;
 
 #[derive(Serialize, Deserialize)]
 pub struct Config {
@@ -59,7 +59,10 @@ async fn main() {
     let mut displayed_frame_count = 0;
 
     loop {
-        clear_background(BLACK);
+        clear_background(Color::from_rgba(0, 0, 0, 0));
+
+
+        draw_text(samples.len().to_string(), 0.0, 64.0, 48.0, WHITE);
 
         let new_frame_count = update_audio_samples(&mut samples, &mut channel_count);
         if new_frame_count > 0 {
