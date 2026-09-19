@@ -1,3 +1,7 @@
 /target
 .idea
 audio.mp3
+/node_modules
+/dist
+/public/wasm
+*.tsbuildinfo

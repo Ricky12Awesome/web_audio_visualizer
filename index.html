@@ -1,8 +1,9 @@
+<!doctype html>
 <html lang="en">
 
 <head>
     <meta charset="utf-8">
-    <title>TITLE</title>
+    <title>Web Audio Visualizer</title>
     <style>
         html,
         body,
@@ -37,39 +38,11 @@
     Playback volume
     <input id="volume" type="range" min="0" max="1" step="0.01" value="0.25">
 </label>
-<script>
-    /** @type {HTMLAudioElement} */
-    const audio = document.getElementById("audio");
-    const playPause = document.getElementById("play-pause");
-    const volume = document.getElementById("volume");
-</script>
 
 <canvas id="glcanvas" tabindex='1'></canvas>
 <!-- Minified and statically hosted version of https://github.com/not-fl3/macroquad/blob/master/js/mq_js_bundle.js -->
 <script src="https://not-fl3.github.io/miniquad-samples/mq_js_bundle.js"></script>
-<script src="audio.js"></script>
-<script>
-    load("target/wasm32-unknown-unknown/debug/web_audio_visualizer.wasm");
-
-    const audioContext = new AudioContext();
-    const rawAudio = audioContext.createMediaElementSource(audio);
-    const playbackVolume = audioContext.createGain();
-
-    // Rust taps rawAudio before playbackVolume, so changing this gain does not
-    // alter the samples Rust receives.
-    rawAudio.connect(playbackVolume);
-    playbackVolume.connect(audioContext.destination);
-    playbackVolume.gain.value = Number(volume.value);
-
-    playPause.addEventListener("click", () => {
-        audio.paused ? audio.play() : audio.pause();
-    });
-    volume.addEventListener("input", () => {
-        playbackVolume.gain.value = Number(volume.value);
-    });
-    audio.addEventListener("play", () => audioContext.resume());
-    setAudioStream(rawAudio);
-</script>
+<script type="module" src="/src/main.ts"></script>
 </body>
 
 </html>
