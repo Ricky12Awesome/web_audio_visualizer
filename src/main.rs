@@ -2,10 +2,11 @@ mod ftt;
 
 use crate::ftt::FFT;
 use macroquad::prelude::*;
+use palette::rgb::Rgb;
+use palette::{Hsl, IntoColor, RgbHue, Srgb};
 use serde::{Deserialize, Serialize};
 use std::f32::consts::PI;
 use std::sync::atomic::{AtomicU32, Ordering};
-use std::time::Instant;
 
 #[derive(Serialize, Deserialize)]
 pub struct Config {
@@ -108,6 +109,7 @@ async fn start() {
         draw_text(&format!("{}", buffer.samples.len()), 20., 40., 32., WHITE);
 
         let radius = 128.;
+        let scale = 512.0;
 
         let samples = (0..frames)
             .map(|frame| {
@@ -124,27 +126,27 @@ async fn start() {
         }
 
         let buffer = &samples;
-        draw_circle_v(
-            &buffer,
-            screen_width() / 5.,
-            screen_height() / 3.33,
-            radius,
-            128.,
-            WHITE,
-        );
-        draw_line_v(&buffer, screen_height() / 1.5, 128., WHITE);
+        // draw_circle_v(
+        //     &buffer,
+        //     screen_width() / 5.,
+        //     screen_height() / 3.33,
+        //     radius,
+        //     128.,
+        //     WHITE,
+        // );
+        // draw_line_v(&buffer, screen_height() / 2.0, scale, WHITE);
 
-        let buffer = fft.process(&buffer, 4096);
+        let buffer = fft.process(&buffer, 2048);
 
-        draw_circle_v(
-            &buffer,
-            screen_width() / 1.25,
-            screen_height() / 3.33,
-            radius,
-            128.,
-            WHITE,
-        );
-        draw_line_v(&buffer, screen_height() / 1.125, 128., WHITE);
+        // draw_circle_v(
+        //     &buffer,
+        //     screen_width() / 1.25,
+        //     screen_height() / 3.33,
+        //     radius,
+        //     128.,
+        //     WHITE,
+        // );
+        draw_line_v(&buffer, screen_height() / 2., scale, WHITE);
 
         let end = (get_time() - start) * 1000.0;
 
@@ -159,13 +161,22 @@ async fn start() {
 }
 
 fn draw_line_v(buffer: &[f32], y: f32, scale: f32, color: Color) {
-    let step = buffer.len() / screen_width() as usize;
+    let step = screen_width() / buffer.len() as f32;
 
     for (i, bar) in buffer.iter().enumerate() {
-        let pos = (step * i) as f32;
+        let hsl = Hsl::new_srgb(
+            RgbHue::new((360. / buffer.len() as f32) * i as f32),
+            1.0,
+            0.5,
+        );
+        let Rgb {
+            red, green, blue, ..
+        } = hsl.into_color();
+
+        let pos = step * i as f32;
         let l = (bar.abs() * scale).max(1.);
-        // let l = bar * scale;
-        draw_rectangle(pos, y - l / 2., 2.0, l, color);
+
+        draw_rectangle(pos, y - l / 2., step, l, Color::new(red, green, blue, 1.0));
     }
 }
 

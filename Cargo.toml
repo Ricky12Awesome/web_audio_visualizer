@@ -9,3 +9,4 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 rustfft = { version = "6.4.1" }
 dasp = { version = "0.11.0", features = ["all"] }
+palette = "0.7.7"
