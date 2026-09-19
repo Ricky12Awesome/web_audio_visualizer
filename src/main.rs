@@ -84,11 +84,28 @@ fn audio_level() -> f32 {
     if count == 0 { 0.0 } else { sum / count as f32 }
 }
 
-#[macroquad::main("Web Audio Visualizer")]
-async fn main() {
+async fn start() {
     loop {
         clear_background(Color::from_rgba(0, 0, 0, 0));
-        draw_text(&format!("{:.3}", audio_level()), 20., 40., 32., WHITE);
+
+        let buffer = unsafe { AUDIO_BUFFER.as_ref() };
+        let Some(buffer) = buffer else {
+            next_frame().await;
+            continue;
+        };
+
+        draw_text(&format!("{}", buffer.samples.len()), 20., 32., 32., WHITE);
+        draw_text(&format!("{}", buffer.state.frames.load(Ordering::SeqCst)), 20., 64., 32., WHITE);
+        draw_text(&format!("{}", buffer.state.channels.load(Ordering::SeqCst)), 20., 96., 32., WHITE);
+        draw_text(&format!("{}", buffer.state.sequence.load(Ordering::SeqCst)), 20., 128., 32., WHITE);
+        draw_text(&format!("{}", buffer.state.frames_written.load(Ordering::SeqCst)), 20., 160., 32., WHITE);
+
+        // draw_text(&format!("{:.3}", audio_level()), 20., 40., 32., WHITE);
         next_frame().await;
     }
+}
+
+#[macroquad::main("Web Audio Visualizer")]
+async fn main() {
+    start().await;
 }
