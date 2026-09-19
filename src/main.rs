@@ -1,10 +1,10 @@
 mod ftt;
 
-use crate::ftt::FFT;
 use macroquad::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::f32::consts::PI;
 use std::sync::atomic::{AtomicU32, Ordering};
+use crate::ftt::FFT;
 
 #[derive(Serialize, Deserialize)]
 pub struct Config {
@@ -68,28 +68,8 @@ pub extern "C" fn audio_buffer_samples() -> *mut f32 {
     }
 }
 
-fn audio_level() -> f32 {
-    let buffer = unsafe { AUDIO_BUFFER.as_ref() };
-    let Some(buffer) = buffer else { return 0.0 };
-    let sequence = buffer.state.sequence.load(Ordering::Acquire);
-    if sequence % 2 != 0 {
-        return 0.0;
-    }
-    let sum = buffer
-        .samples
-        .iter()
-        .map(|sample| sample.abs())
-        .sum::<f32>();
-    if sequence != buffer.state.sequence.load(Ordering::Acquire) {
-        return 0.0;
-    }
-    let count = buffer.state.channels.load(Ordering::Relaxed)
-        * buffer.state.frames_written.load(Ordering::Relaxed);
-    if count == 0 { 0.0 } else { sum / count as f32 }
-}
-
 async fn start() {
-    // let mut fft = FFT::<16384>::new();
+    let mut fft = FFT::default();
 
     loop {
         clear_background(Color::from_rgba(0, 0, 0, 0));
@@ -104,8 +84,6 @@ async fn start() {
         let channels = buffer.state.sequence.load(Ordering::Acquire);
         let frames = buffer.state.frames.load(Ordering::Acquire);
 
-        // let buffer = fft.process(&buffer.samples, 512);
-
         draw_text(
             &format!("FPS: {}", get_fps()),
             screen_width() - 120.,
@@ -114,12 +92,17 @@ async fn start() {
             crate::WHITE,
         );
         // draw_text(&format!("{:.3}", audio_level()), 20., 40., 32., WHITE);
+        draw_text(&format!("{}", buffer.samples.len()), 20., 40., 32., WHITE);
 
         let radius = 128.;
         let x = screen_width() / 2.;
         let y = screen_height() / 2.;
 
-        draw(&buffer.samples, x, y, radius, 128., WHITE);
+        let samples = buffer.samples.iter().step_by(2).copied().collect::<Vec<_>>();
+
+        let buffer = fft.process(&samples, 4096);
+
+        draw(&buffer, x, y, radius, 128., WHITE);
 
         next_frame().await;
     }
@@ -127,7 +110,7 @@ async fn start() {
 
 fn draw(buffer: &[f32], x: f32, y: f32, radius: f32, scale: f32, color: Color) {
     let mut angle = 0.;
-    let len = buffer.len() as f32;
+    let len = (buffer.len() / 2) as f32;
     let step = (PI * 2.) / len;
 
     while angle < PI * 2. {

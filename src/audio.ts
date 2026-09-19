@@ -2,7 +2,9 @@ declare function miniquad_add_plugin(plugin: { name: string; version: number; re
 declare const wasm_memory: WebAssembly.Memory;
 declare const wasm_exports: { audio_buffer_init(channels: number, frames: number): number; audio_buffer_state(): number; audio_buffer_samples(): number };
 
-type CaptureMessage = { type: "ready" } | { type: "format"; channelCount: number; frames: number };
+type CaptureMessage = { type: "ready" } | { type: "format"; channelCount: number; frames: number; quantumFrames: number };
+
+let accumulationBlocks = 16;
 
 let captureNode: AudioWorkletNode | undefined;
 
@@ -18,7 +20,12 @@ async function startCapture(): Promise<void> {
     captureNode = new AudioWorkletNode(audioContext, "capture", {
         channelCountMode: "explicit",
         channelCount: audioContext.destination.channelCount,
-        processorOptions: { sharedBuffer: wasm_memory.buffer, stateAddress: 0, samplesAddress: 0 },
+        processorOptions: {
+            sharedBuffer: wasm_memory.buffer,
+            stateAddress: 0,
+            samplesAddress: 0,
+            blocks: accumulationBlocks,
+        },
     });
     captureNode.port.onmessage = (event: MessageEvent<CaptureMessage>) => {
         if (event.data.type !== "format") return;
