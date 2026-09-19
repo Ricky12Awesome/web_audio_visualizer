@@ -6,17 +6,18 @@ declare function miniquad_add_plugin(plugin: {
 
 declare const wasm_memory: WebAssembly.Memory;
 
-
-
-
 miniquad_add_plugin({
   name: "web_audio",
   version: 1,
   register_plugin(importObject) {
-    // const env = importObject.env as Record<string, unknown>;
-
-    // env.audio_available_frame_count = availableAudioFrames;
+    const env = importObject.env as Record<string, unknown>;
+    env.get_buffer = () => 2;
     // env.audio_channel_count = () => channelCount;
     // env.audio_samples = readAudioSamples;
   },
 });
+
+
+export {
+
+}

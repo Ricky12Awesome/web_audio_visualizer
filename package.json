@@ -11,6 +11,7 @@
     "wasm": "cargo build --target wasm32-unknown-unknown --release && node scripts/copy-wasm.mjs"
   },
   "devDependencies": {
+    "@types/audioworklet": "^0.0.100",
     "typescript": "^7.0.2",
     "vite": "^8.3.0"
   }
