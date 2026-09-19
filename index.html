@@ -16,17 +16,32 @@
             background: black;
             z-index: 0;
         }
+
+        canvas {
+            inset: 0;
+        }
+
+        button,
+        label {
+            position: relative;
+            z-index: 1;
+            color: white;
+        }
     </style>
 </head>
 
 <body>
-<audio id="audio" src="audio.mp3" controls autoplay></audio>
+<audio id="audio" src="audio.mp3" autoplay></audio>
+<button id="play-pause" type="button">Play / pause</button>
+<label>
+    Playback volume
+    <input id="volume" type="range" min="0" max="1" step="0.01" value="0.25">
+</label>
 <script>
     /** @type {HTMLAudioElement} */
     const audio = document.getElementById("audio");
-    audio.addEventListener("loadedmetadata", () => {
-        audio.volume = 0.25;
-    });
+    const playPause = document.getElementById("play-pause");
+    const volume = document.getElementById("volume");
 </script>
 
 <canvas id="glcanvas" tabindex='1'></canvas>
@@ -35,7 +50,25 @@
 <script src="audio.js"></script>
 <script>
     load("target/wasm32-unknown-unknown/debug/web_audio_visualizer.wasm");
-    setAudioStream(audio);
+
+    const audioContext = new AudioContext();
+    const rawAudio = audioContext.createMediaElementSource(audio);
+    const playbackVolume = audioContext.createGain();
+
+    // Rust taps rawAudio before playbackVolume, so changing this gain does not
+    // alter the samples Rust receives.
+    rawAudio.connect(playbackVolume);
+    playbackVolume.connect(audioContext.destination);
+    playbackVolume.gain.value = Number(volume.value);
+
+    playPause.addEventListener("click", () => {
+        audio.paused ? audio.play() : audio.pause();
+    });
+    volume.addEventListener("input", () => {
+        playbackVolume.gain.value = Number(volume.value);
+    });
+    audio.addEventListener("play", () => audioContext.resume());
+    setAudioStream(rawAudio);
 </script>
 </body>
 
