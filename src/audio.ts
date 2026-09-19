@@ -15,7 +15,7 @@ async function startCapture(): Promise<void> {
         throw new Error("WASM must be built with shared memory and served cross-origin isolated");
     }
     const audioContext = new AudioContext();
-    await audioContext.audioWorklet.addModule(new URL("./capture.ts", import.meta.url));
+    await audioContext.audioWorklet.addModule("/capture.js");
     const source = audioContext.createMediaElementSource(element);
     captureNode = new AudioWorkletNode(audioContext, "capture", {
         channelCountMode: "explicit",

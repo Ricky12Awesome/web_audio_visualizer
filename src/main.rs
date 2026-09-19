@@ -1,10 +1,11 @@
 mod ftt;
 
+use crate::ftt::FFT;
 use macroquad::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::f32::consts::PI;
 use std::sync::atomic::{AtomicU32, Ordering};
-use crate::ftt::FFT;
+use std::time::Instant;
 
 #[derive(Serialize, Deserialize)]
 pub struct Config {
@@ -71,8 +72,11 @@ pub extern "C" fn audio_buffer_samples() -> *mut f32 {
 async fn start() {
     let mut fft = FFT::default();
 
+    let mut time = 0.;
+
     loop {
         clear_background(Color::from_rgba(0, 0, 0, 0));
+        let start = get_time();
 
         let buffer = unsafe { AUDIO_BUFFER.as_ref() };
         let Some(buffer) = buffer else {
@@ -104,8 +108,6 @@ async fn start() {
         draw_text(&format!("{}", buffer.samples.len()), 20., 40., 32., WHITE);
 
         let radius = 128.;
-        let x = screen_width() / 2.;
-        let y = screen_height() / 2.;
 
         let samples = (0..frames)
             .map(|frame| {
@@ -121,25 +123,63 @@ async fn start() {
             continue;
         }
 
-        let buffer = fft.process(&samples, 128);
+        let buffer = &samples;
+        draw_circle_v(
+            &buffer,
+            screen_width() / 5.,
+            screen_height() / 3.33,
+            radius,
+            128.,
+            WHITE,
+        );
+        draw_line_v(&buffer, screen_height() / 1.5, 128., WHITE);
 
-        draw(&buffer, x, y, radius, 128., WHITE);
+        let buffer = fft.process(&buffer, 4096);
+
+        draw_circle_v(
+            &buffer,
+            screen_width() / 1.25,
+            screen_height() / 3.33,
+            radius,
+            128.,
+            WHITE,
+        );
+        draw_line_v(&buffer, screen_height() / 1.125, 128., WHITE);
+
+        let end = (get_time() - start) * 1000.0;
+
+        if end > time {
+            time = end;
+        }
+
+        draw_text(format!("{:}", time), 200., 32., 24., WHITE);
 
         next_frame().await;
     }
 }
 
-fn draw(buffer: &[f32], x: f32, y: f32, radius: f32, scale: f32, color: Color) {
+fn draw_line_v(buffer: &[f32], y: f32, scale: f32, color: Color) {
+    let step = buffer.len() / screen_width() as usize;
+
+    for (i, bar) in buffer.iter().enumerate() {
+        let pos = (step * i) as f32;
+        let l = (bar.abs() * scale).max(1.);
+        // let l = bar * scale;
+        draw_rectangle(pos, y - l / 2., 2.0, l, color);
+    }
+}
+
+fn draw_circle_v(buffer: &[f32], x: f32, y: f32, radius: f32, scale: f32, color: Color) {
     let len = buffer.len() / 2;
     let step = (PI * 2.) / len as f32;
 
     for i in 0..len {
         let angle = i as f32 * step;
         let l = buffer[i].abs() * scale;
-        let ix = x + angle.cos() * radius;
-        let iy = y + angle.sin() * radius;
-        let ox = x + angle.cos() * (radius + l);
-        let oy = y + angle.sin() * (radius + l);
+        let ix = x + angle.cos() * (radius - (l / 2.));
+        let iy = y + angle.sin() * (radius - (l / 2.));
+        let ox = x + angle.cos() * (radius + (l / 2.));
+        let oy = y + angle.sin() * (radius + (l / 2.));
 
         draw_line(ix, iy, ox, oy, 1.0, color);
     }

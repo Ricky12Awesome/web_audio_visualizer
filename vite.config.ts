@@ -1,7 +1,47 @@
 import { spawn, type ChildProcess } from "node:child_process";
+import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import type { Plugin, ViteDevServer } from "vite";
-import { defineConfig } from "vite";
+import { defineConfig, transformWithOxc } from "vite";
+
+function audioWorklet(): Plugin {
+  const sourcePath = resolve(process.cwd(), "src/capture.ts");
+
+  return {
+    name: "audio-worklet",
+    configureServer(server) {
+      server.middlewares.use(async (request, response, next) => {
+        if (request.url?.split("?", 1)[0] !== "/capture.js") {
+          next();
+          return;
+        }
+
+        const transformed = await server.transformRequest("/src/capture.ts");
+        if (transformed === null) {
+          next();
+          return;
+        }
+
+        response.statusCode = 200;
+        response.setHeader("Content-Type", "text/javascript");
+        response.end(transformed.code);
+      });
+    },
+    async generateBundle() {
+      const source = await readFile(sourcePath, "utf8");
+      const transformed = await transformWithOxc(source, sourcePath, {
+        lang: "ts",
+        target: "es2022",
+      });
+
+      this.emitFile({
+        type: "asset",
+        fileName: "capture.js",
+        source: transformed.code,
+      });
+    },
+  };
+}
 
 function rustWasmHotReload(): Plugin {
   let buildProcess: ChildProcess | undefined;
@@ -68,7 +108,7 @@ function rustWasmHotReload(): Plugin {
 }
 
 export default defineConfig({
-  plugins: [rustWasmHotReload()],
+  plugins: [audioWorklet(), rustWasmHotReload()],
   server: { headers: { "Cross-Origin-Embedder-Policy": "credentialless", "Cross-Origin-Opener-Policy": "same-origin" } },
   preview: { headers: { "Cross-Origin-Embedder-Policy": "credentialless", "Cross-Origin-Opener-Policy": "same-origin" } },
 });
