@@ -81,8 +81,17 @@ async fn start() {
         };
 
         let sequence = buffer.state.sequence.load(Ordering::Acquire);
-        let channels = buffer.state.sequence.load(Ordering::Acquire);
-        let frames = buffer.state.frames.load(Ordering::Acquire);
+        if sequence % 2 != 0 {
+            next_frame().await;
+            continue;
+        }
+
+        let channels = buffer.state.channels.load(Ordering::Relaxed) as usize;
+        let frames = buffer.state.frames_written.load(Ordering::Relaxed) as usize;
+        if channels == 0 || frames == 0 {
+            next_frame().await;
+            continue;
+        }
 
         draw_text(
             &format!("FPS: {}", get_fps()),
@@ -98,9 +107,21 @@ async fn start() {
         let x = screen_width() / 2.;
         let y = screen_height() / 2.;
 
-        let samples = buffer.samples.iter().step_by(2).copied().collect::<Vec<_>>();
+        let samples = (0..frames)
+            .map(|frame| {
+                (0..channels)
+                    .map(|channel| buffer.samples[channel * frames + frame])
+                    .sum::<f32>()
+                    / channels as f32
+            })
+            .collect::<Vec<_>>();
 
-        let buffer = fft.process(&samples, 4096);
+        if sequence != buffer.state.sequence.load(Ordering::Acquire) {
+            next_frame().await;
+            continue;
+        }
+
+        let buffer = fft.process(&samples, 128);
 
         draw(&buffer, x, y, radius, 128., WHITE);
 
@@ -109,12 +130,11 @@ async fn start() {
 }
 
 fn draw(buffer: &[f32], x: f32, y: f32, radius: f32, scale: f32, color: Color) {
-    let mut angle = 0.;
-    let len = (buffer.len() / 2) as f32;
-    let step = (PI * 2.) / len;
+    let len = buffer.len() / 2;
+    let step = (PI * 2.) / len as f32;
 
-    while angle < PI * 2. {
-        let i = (len * step).floor() as usize;
+    for i in 0..len {
+        let angle = i as f32 * step;
         let l = buffer[i].abs() * scale;
         let ix = x + angle.cos() * radius;
         let iy = y + angle.sin() * radius;
@@ -122,8 +142,6 @@ fn draw(buffer: &[f32], x: f32, y: f32, radius: f32, scale: f32, color: Color) {
         let oy = y + angle.sin() * (radius + l);
 
         draw_line(ix, iy, ox, oy, 1.0, color);
-
-        angle += step;
     }
 }
 
