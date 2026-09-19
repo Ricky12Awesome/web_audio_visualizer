@@ -1,10 +1,10 @@
 mod ftt;
 
+use crate::ftt::FFT;
 use macroquad::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::f32::consts::PI;
 use std::sync::atomic::{AtomicU32, Ordering};
-use crate::ftt::FFT;
 
 #[derive(Serialize, Deserialize)]
 pub struct Config {
@@ -89,7 +89,7 @@ fn audio_level() -> f32 {
 }
 
 async fn start() {
-    let mut fft = FFT::<16384>::new();
+    // let mut fft = FFT::<16384>::new();
 
     loop {
         clear_background(Color::from_rgba(0, 0, 0, 0));
@@ -100,38 +100,47 @@ async fn start() {
             continue;
         };
 
-        draw_text(&format!("{}", buffer.samples.len()), 20., 32., 32., WHITE);
-        draw_text(&format!("{}", buffer.state.frames.load(Ordering::SeqCst)), 20., 64., 24., WHITE);
-        draw_text(&format!("{}", buffer.state.channels.load(Ordering::SeqCst)), 20., 96., 24., WHITE);
-        draw_text(&format!("{}", buffer.state.sequence.load(Ordering::SeqCst)), 20., 128., 24., WHITE);
-        draw_text(&format!("{}", buffer.state.frames_written.load(Ordering::SeqCst)), 20., 160., 24., WHITE);
+        let sequence = buffer.state.sequence.load(Ordering::Acquire);
+        let channels = buffer.state.sequence.load(Ordering::Acquire);
+        let frames = buffer.state.frames.load(Ordering::Acquire);
 
-        let buffer = fft.process(&buffer.samples, 512);
+        // let buffer = fft.process(&buffer.samples, 512);
 
-        draw_text(&format!("FPS: {}", get_fps()), screen_width() - 120., 32., 24., crate::WHITE);
+        draw_text(
+            &format!("FPS: {}", get_fps()),
+            screen_width() - 120.,
+            32.,
+            24.,
+            crate::WHITE,
+        );
         // draw_text(&format!("{:.3}", audio_level()), 20., 40., 32., WHITE);
 
-        let mut angle = 0.;
-        let len = buffer.len() as f32;
-        let step = (PI * 2.) / len;
         let radius = 128.;
         let x = screen_width() / 2.;
         let y = screen_height() / 2.;
 
-        while angle < PI * 2. {
-            let i = (len * step).floor() as usize;
-            let l = buffer[i] * 128.;
-            let ix = x + angle.cos() * radius;
-            let iy = y + angle.sin() * radius;
-            let ox = x + angle.cos() * (radius + l);
-            let oy = y + angle.sin() * (radius + l);
-
-            draw_line(ix, iy, ox, oy, 1.0, WHITE);
-
-            angle += step;
-        }
+        draw(&buffer.samples, x, y, radius, 128., WHITE);
 
         next_frame().await;
+    }
+}
+
+fn draw(buffer: &[f32], x: f32, y: f32, radius: f32, scale: f32, color: Color) {
+    let mut angle = 0.;
+    let len = buffer.len() as f32;
+    let step = (PI * 2.) / len;
+
+    while angle < PI * 2. {
+        let i = (len * step).floor() as usize;
+        let l = buffer[i].abs() * scale;
+        let ix = x + angle.cos() * radius;
+        let iy = y + angle.sin() * radius;
+        let ox = x + angle.cos() * (radius + l);
+        let oy = y + angle.sin() * (radius + l);
+
+        draw_line(ix, iy, ox, oy, 1.0, color);
+
+        angle += step;
     }
 }
 
