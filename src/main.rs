@@ -70,22 +70,53 @@ pub extern "C" fn audio_buffer_samples() -> *mut f32 {
     }
 }
 
+#[derive(Default)]
+struct Retention {
+    buf: Vec<f32>,
+    delta_seconds: f32,
+    retention_seconds: f32,
+}
+
+impl Retention {
+    fn update(&mut self, len: usize) {
+        self.delta_seconds = get_frame_time();
+        if len > self.buf.len() {
+            self.buf.resize(len, 0.0);
+        }
+    }
+
+    fn retain(&mut self, i: usize, target: f32) -> f32 {
+        self.buf[i] = Self::settle_bar(
+            self.buf[i],
+            target,
+            self.delta_seconds,
+            self.retention_seconds,
+        );
+
+        self.buf[i].max(1.)
+    }
+
+    fn settle_bar(current: f32, target: f32, delta_seconds: f32, retention_seconds: f32) -> f32 {
+        if target >= current || retention_seconds <= 0.0 {
+            return target;
+        }
+
+        (current - (current - target) * (delta_seconds / retention_seconds)).max(target)
+    }
+}
+
 async fn start() {
     let mut fft = FFT::default();
-    let mut retained_bars = Vec::new();
-    let mut last_frame_time = get_time();
-
-    /// How long a bar takes to fall from its retained peak to the current value.
-    /// Set this to `0.0` to disable retention.
-    const BAR_RETENTION_SECONDS: f32 = 25.0 / 1000.0;
+    let mut retention = Retention {
+        retention_seconds: 25. / 1000.,
+        ..Retention::default()
+    };
 
     let mut time = 0.;
 
     loop {
         clear_background(Color::from_rgba(0, 0, 0, 0));
         let start = get_time();
-        let delta_seconds = (start - last_frame_time).clamp(0.0, 0.1) as f32;
-        last_frame_time = start;
 
         let buffer = unsafe { AUDIO_BUFFER.as_ref() };
         let Some(buffer) = buffer else {
@@ -143,17 +174,13 @@ async fn start() {
         //     WHITE,
         // );
 
-        draw_line_v(
-            &buffer,
-            screen_height() / 2.0,
-            scale,
-            WHITE,
-            &mut retained_bars,
-            delta_seconds,
-            BAR_RETENTION_SECONDS,
-        );
+        retention.update(buffer.len());
+
+        draw_line_v(&buffer, screen_height() / 2.0, scale, WHITE, &mut retention);
 
         let buffer = fft.process(&buffer, 2048);
+
+        // retention.update(buffer.len());
 
         // draw_circle_v(
         //     &buffer,
@@ -163,15 +190,7 @@ async fn start() {
         //     128.,
         //     WHITE,
         // );
-        // draw_line_v(
-        //     &buffer,
-        //     screen_height() / 2.,
-        //     scale,
-        //     WHITE,
-        //     &mut retained_bars,
-        //     delta_seconds,
-        //     BAR_RETENTION_SECONDS,
-        // );
+        // draw_line_v(&buffer, screen_height() / 2., scale, WHITE, &mut retention);
 
         let end = (get_time() - start) * 1000.0;
 
@@ -185,16 +204,7 @@ async fn start() {
     }
 }
 
-fn draw_line_v(
-    buffer: &[f32],
-    y: f32,
-    scale: f32,
-    color: Color,
-    retained_bars: &mut Vec<f32>,
-    delta_seconds: f32,
-    retention_seconds: f32,
-) {
-    retained_bars.resize(buffer.len(), 0.0);
+fn draw_line_v(buffer: &[f32], y: f32, scale: f32, color: Color, retention: &mut Retention) {
     let step = screen_width() / buffer.len() as f32;
 
     for (i, bar) in buffer.iter().enumerate() {
@@ -208,25 +218,10 @@ fn draw_line_v(
         } = hsl.into_color();
 
         let pos = step * i as f32;
-        let target_height = bar.abs() * scale;
-        retained_bars[i] = settle_bar(
-            retained_bars[i],
-            target_height,
-            delta_seconds,
-            retention_seconds,
-        );
-        let l = retained_bars[i].max(1.);
+        let l = retention.retain(i, bar.abs() * scale);
 
         draw_rectangle(pos, y - l / 2., step, l, Color::new(red, green, blue, 1.0));
     }
-}
-
-fn settle_bar(current: f32, target: f32, delta_seconds: f32, retention_seconds: f32) -> f32 {
-    if target >= current || retention_seconds <= 0.0 {
-        return target;
-    }
-
-    (current - (current - target) * (delta_seconds / retention_seconds)).max(target)
 }
 
 fn draw_circle_v(buffer: &[f32], x: f32, y: f32, radius: f32, scale: f32, color: Color) {
