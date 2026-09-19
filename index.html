@@ -20,7 +20,7 @@
 </head>
 
 <body>
-<audio id="audio" src="audio.mp3" autoplay></audio>
+<audio id="audio" src="audio.mp3" controls autoplay></audio>
 <script>
     /** @type {HTMLAudioElement} */
     const audio = document.getElementById("audio");
@@ -32,7 +32,11 @@
 <canvas id="glcanvas" tabindex='1'></canvas>
 <!-- Minified and statically hosted version of https://github.com/not-fl3/macroquad/blob/master/js/mq_js_bundle.js -->
 <script src="https://not-fl3.github.io/miniquad-samples/mq_js_bundle.js"></script>
-<script>load("target/wasm32-unknown-unknown/debug/web_audio_visualizer.wasm");</script> <!-- Your compiled wasm file -->
+<script src="audio.js"></script>
+<script>
+    load("target/wasm32-unknown-unknown/debug/web_audio_visualizer.wasm");
+    setAudioStream(audio);
+</script>
 </body>
 
 </html>
