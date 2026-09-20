@@ -112,11 +112,8 @@ async fn start() {
         ..Retention::default()
     };
 
-    let mut time = 0.;
-
     loop {
         clear_background(Color::from_rgba(0, 0, 0, 0));
-        let start = get_time();
 
         let buffer = unsafe { AUDIO_BUFFER.as_ref() };
         let Some(buffer) = buffer else {
@@ -148,7 +145,7 @@ async fn start() {
         draw_text(&format!("{}", buffer.samples.len()), 20., 40., 32., WHITE);
 
         let radius = 128.;
-        let scale = 512.0;
+        let scale = 256.0;
 
         let samples = (0..frames)
             .map(|frame| {
@@ -174,13 +171,39 @@ async fn start() {
         //     WHITE,
         // );
 
+        // retention.update(buffer.len());
+
+        // draw_line_v(&buffer, screen_height() / 2.0, scale, WHITE, &mut retention);
+
+        let buffer = fft.process(&buffer, 16384);
+
         retention.update(buffer.len());
 
-        draw_line_v(&buffer, screen_height() / 2.0, scale, WHITE, &mut retention);
+        let half_l = &buffer[..buffer.len() / 2];
+        let half_r = &buffer[buffer.len() / 2..];
 
-        let buffer = fft.process(&buffer, 2048);
+        draw_text(format!("{} --- {}", half_l.len(), half_r.len()), 20., 70., 32., WHITE);
 
-        // retention.update(buffer.len());
+        draw_line_visualizer(
+            half_l.iter().rev().chain(half_r.iter().rev()).copied(),
+            buffer.len(),
+            screen_height() / 2.,
+            scale,
+            &mut retention,
+            VisualizerMode::Vertical,
+            |i, _| {
+                let hsl = Hsl::new_srgb(
+                    RgbHue::new((360. / buffer.len() as f32) * i as f32),
+                    1.0,
+                    0.5,
+                );
+                let Rgb {
+                    red, green, blue, ..
+                } = hsl.into_color();
+
+                Color::new(red, green, blue, 1.0)
+            },
+        );
 
         // draw_circle_v(
         //     &buffer,
@@ -192,15 +215,52 @@ async fn start() {
         // );
         // draw_line_v(&buffer, screen_height() / 2., scale, WHITE, &mut retention);
 
-        let end = (get_time() - start) * 1000.0;
-
-        if end > time {
-            time = end;
-        }
-
-        draw_text(format!("{:}", time), 200., 32., 24., WHITE);
+        draw_text(
+            format!("{:}", get_frame_time() * 1000.),
+            200.,
+            32.,
+            24.,
+            WHITE,
+        );
 
         next_frame().await;
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+enum VisualizerMode {
+    Vertical,
+    Up,
+    Down,
+}
+
+fn draw_line_visualizer(
+    buffer: impl Iterator<Item = f32>,
+    buffer_len: usize,
+    y: f32,
+    scale: f32,
+    retention: &mut Retention,
+    mode: VisualizerMode,
+    color: impl Fn(usize, f32) -> Color,
+) {
+    let step = screen_width() / buffer_len as f32;
+
+    for (i, bar) in buffer.enumerate() {
+        let bar = retention.retain(i, bar.abs() * scale);
+        let color = color(i, bar);
+        let pos = step * i as f32;
+
+        match mode {
+            VisualizerMode::Vertical => {
+                draw_line(pos, y - bar / 2., pos, y + bar / 2., step, color);
+            }
+            VisualizerMode::Up => {
+                draw_line(pos, y - bar, pos, y, step, color);
+            }
+            VisualizerMode::Down => {
+                draw_line(pos, y, pos, y + bar, step, color);
+            }
+        }
     }
 }
 
@@ -220,7 +280,15 @@ fn draw_line_v(buffer: &[f32], y: f32, scale: f32, color: Color, retention: &mut
         let pos = step * i as f32;
         let l = retention.retain(i, bar.abs() * scale);
 
-        draw_rectangle(pos, y - l / 2., step, l, Color::new(red, green, blue, 1.0));
+        // draw_rectangle(pos, y - l / 2., step, l, Color::new(red, green, blue, 1.0));
+        draw_line(
+            pos,
+            y - l / 2.,
+            pos,
+            y + l / 2.,
+            step,
+            Color::new(red, green, blue, 1.0),
+        );
     }
 }
 
