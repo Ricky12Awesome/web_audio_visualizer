@@ -1,7 +1,7 @@
 use dasp::window::{Hanning, Window};
 use rustfft::{FftPlanner, num_complex::Complex32, num_traits::Zero};
 
-pub struct FFT<const BUF_SIZE: usize = 16384>  {
+pub struct FFT<const BUF_SIZE: usize = 16384> {
     planner: FftPlanner<f32>,
     data: Vec<f32>,
 }
@@ -48,6 +48,9 @@ impl<const BUF_SIZE: usize> FFT<BUF_SIZE> {
             }
         } else {
             for i in 0..buf.len().min(size) {
+                // let sample = buf[i];
+                // let window = 0.5 * (1.0 - (2.0 * std::f32::consts::PI * i as f32 / (buf.len() - 1) as f32).cos());
+
                 let value = Hanning::window(buf[i]);
                 buffer[i] = Complex32::from(value);
             }
@@ -65,7 +68,8 @@ impl<const BUF_SIZE: usize> FFT<BUF_SIZE> {
         fft.process_with_scratch(&mut buffer[..size], &mut scratch[..scratch_len]);
 
         for i in 0..size {
-            self.data[i] = buffer[i].re / max;
+            // self.data[i] = buffer[i].re / max;
+            self.data[i] = buffer[i].norm() / max;
         }
 
         &self.data[..size]

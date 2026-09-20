@@ -3,7 +3,7 @@ mod ftt;
 use crate::ftt::FFT;
 use macroquad::prelude::*;
 use palette::rgb::Rgb;
-use palette::{Hsl, IntoColor, RgbHue, Srgb};
+use palette::{Hsl, IntoColor, RgbHue};
 use serde::{Deserialize, Serialize};
 use std::f32::consts::PI;
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -79,6 +79,10 @@ struct Retention {
 
 impl Retention {
     fn update(&mut self, len: usize) {
+        if self.retention_seconds == 0.0 {
+            return;
+        }
+
         self.delta_seconds = get_frame_time();
         if len > self.buf.len() {
             self.buf.resize(len, 0.0);
@@ -86,6 +90,10 @@ impl Retention {
     }
 
     fn retain(&mut self, i: usize, target: f32) -> f32 {
+        if self.retention_seconds == 0.0 {
+            return target;
+        }
+
         self.buf[i] = Self::settle_bar(
             self.buf[i],
             target,
@@ -105,10 +113,22 @@ impl Retention {
     }
 }
 
+fn rgb_hue(i: usize, len: usize, _: f32) -> Color {
+    // WHITE
+
+    let hsl = Hsl::new_srgb(RgbHue::new((360. / len as f32) * i as f32), 1.0, 0.5);
+    let Rgb {
+        red, green, blue, ..
+    } = hsl.into_color();
+
+    Color::new(red, green, blue, 1.0)
+}
+
 async fn start() {
     let mut fft = FFT::default();
     let mut retention = Retention {
-        retention_seconds: 25. / 1000.,
+        // retention_seconds: 16.667 / 1000.,
+        retention_seconds: 0.,
         ..Retention::default()
     };
 
@@ -144,7 +164,7 @@ async fn start() {
         // draw_text(&format!("{:.3}", audio_level()), 20., 40., 32., WHITE);
         draw_text(&format!("{}", buffer.samples.len()), 20., 40., 32., WHITE);
 
-        let radius = 128.;
+        let radius = (screen_height() / 2.5).min(screen_width() / 2.5);
         let scale = 256.0;
 
         let samples = (0..frames)
@@ -162,58 +182,83 @@ async fn start() {
         }
 
         let buffer = &samples;
-        // draw_circle_v(
-        //     &buffer,
-        //     screen_width() / 5.,
-        //     screen_height() / 3.33,
-        //     radius,
-        //     128.,
-        //     WHITE,
-        // );
-
-        // retention.update(buffer.len());
-
-        // draw_line_v(&buffer, screen_height() / 2.0, scale, WHITE, &mut retention);
-
-        let buffer = fft.process(&buffer, 16384);
+        let buffer = fft.process(&buffer, 512);
 
         retention.update(buffer.len());
 
         let half_l = &buffer[..buffer.len() / 2];
         let half_r = &buffer[buffer.len() / 2..];
 
-        draw_text(format!("{} --- {}", half_l.len(), half_r.len()), 20., 70., 32., WHITE);
-
-        draw_line_visualizer(
-            half_l.iter().rev().chain(half_r.iter().rev()).copied(),
-            buffer.len(),
-            screen_height() / 2.,
-            scale,
-            &mut retention,
-            VisualizerMode::Vertical,
-            |i, _| {
-                let hsl = Hsl::new_srgb(
-                    RgbHue::new((360. / buffer.len() as f32) * i as f32),
-                    1.0,
-                    0.5,
-                );
-                let Rgb {
-                    red, green, blue, ..
-                } = hsl.into_color();
-
-                Color::new(red, green, blue, 1.0)
-            },
+        draw_text(
+            format!("{} --- {}", half_l.len(), half_r.len()),
+            20.,
+            70.,
+            32.,
+            WHITE,
         );
+
+        let skip = 2;
+        let iter = half_l
+            .iter()
+            .skip(skip)
+            .rev()
+            .chain(half_r.iter().rev().skip(skip))
+            .map(|bar| (1.0 + bar.abs() * 1.0).ln() * scale);
+
+        // let iter = iter.clone().chain(iter.rev());
+        // let mut n = 2;
+        // let iter = iter.clone().chain(iter.rev());
+        // n *= 2;
+        // let iter = iter.clone().chain(iter.rev());
+        // n *= 2;
+        // let iter = iter.clone().chain(iter.rev());
+        // n *= 2;
+        // let iter = iter.clone().chain(iter.rev());
+        // n *= 2;
+        // let iter = iter.clone().chain(iter.rev());
+        // n *= 2;
+        // let iter = iter.clone().chain(iter.rev());
+        // n *= 2;
+        // let iter = iter.clone().chain(iter.rev());
+        // n *= 2;
+
+        // draw_line_visualizer(
+        //     iter,
+        //     buffer.len() - (n * 2),
+        //     screen_height() / 2.,
+        //     &mut retention,
+        //     VisualizerMode::Vertical,
+        //     rgb_hue,
+        // );
+
+        // draw_circle_visualizer(
+        //     iter,
+        //     buffer.len() * n - (skip * 2 * n),
+        //     screen_width() / 2.,
+        //     screen_height() / 2.,
+        //     radius,
+        //     &mut retention,
+        //     rgb_hue,
+        // );
 
         // draw_circle_v(
         //     &buffer,
-        //     screen_width() / 1.25,
-        //     screen_height() / 3.33,
+        //     screen_width() / 2.,
+        //     screen_height() / 2.,
         //     radius,
         //     128.,
         //     WHITE,
         // );
-        // draw_line_v(&buffer, screen_height() / 2., scale, WHITE, &mut retention);
+
+        test(
+            iter,
+            buffer.len() - (skip * 2),
+            screen_width() / 2.,
+            screen_height() / 2.,
+            radius,
+            &mut retention,
+            rgb_hue,
+        );
 
         draw_text(
             format!("{:}", get_frame_time() * 1000.),
@@ -238,17 +283,18 @@ fn draw_line_visualizer(
     buffer: impl Iterator<Item = f32>,
     buffer_len: usize,
     y: f32,
-    scale: f32,
     retention: &mut Retention,
     mode: VisualizerMode,
-    color: impl Fn(usize, f32) -> Color,
+    color: impl Fn(usize, usize, f32) -> Color,
 ) {
-    let step = screen_width() / buffer_len as f32;
+    let width = screen_width();
+    let offset = (screen_width() - width) / 2.;
+    let step = width / buffer_len as f32;
 
     for (i, bar) in buffer.enumerate() {
-        let bar = retention.retain(i, bar.abs() * scale);
-        let color = color(i, bar);
-        let pos = step * i as f32;
+        let bar = retention.retain(i, bar);
+        let color = color(i, buffer_len, bar);
+        let pos = offset + (step * i as f32);
 
         match mode {
             VisualizerMode::Vertical => {
@@ -262,6 +308,92 @@ fn draw_line_visualizer(
             }
         }
     }
+}
+
+fn draw_circle_visualizer(
+    buffer: impl Iterator<Item = f32>,
+    buffer_len: usize,
+    x: f32,
+    y: f32,
+    radius: f32,
+    retention: &mut Retention,
+    color: impl Fn(usize, usize, f32) -> Color,
+) {
+    let step = (PI * 2.) / buffer_len as f32;
+
+    for (i, bar) in buffer.enumerate() {
+        let bar = retention.retain(i, bar);
+        let color = color(i, buffer_len, bar);
+        let angle = i as f32 * step;
+        let ix = x + angle.cos() * (radius - (bar / 2.));
+        let iy = y + angle.sin() * (radius - (bar / 2.));
+        let ox = x + angle.cos() * (radius + (bar / 2.));
+        let oy = y + angle.sin() * (radius + (bar / 2.));
+
+        draw_line(ix, iy, ox, oy, radius * step, color);
+    }
+}
+
+fn test(
+    buffer: impl Iterator<Item = f32>,
+    buffer_len: usize,
+    x: f32,
+    y: f32,
+    radius: f32,
+    retention: &mut Retention,
+    color: impl Fn(usize, usize, f32) -> Color,
+) {
+    let mut vertices = Vec::with_capacity(buffer_len + 1);
+    let mut indices = Vec::with_capacity(buffer_len * 3);
+
+    let width = screen_width();
+    let offset = (screen_width() - width) / 2.;
+    let step = width / buffer_len as f32;
+
+    // Center vertex.
+    vertices.push(Vertex::new(offset, y, 0.0, 0.0, 0.0, WHITE));
+
+    for (i, bar) in buffer.enumerate() {
+        let bar = retention.retain(i, bar);
+        let color = color(i, buffer_len, bar);
+        let pos = offset + (step * i as f32);
+
+        vertices.push(Vertex::new(pos, y - bar, 0.0, 0.0, 0.0, color));
+
+        let current = i + 1;
+        let next = ((i + 1) % buffer_len) + 1;
+
+        if next == buffer_len {
+            draw_text(
+                format!("{} -- {} --- {}", current, next, buffer_len),
+                20.,
+                102.,
+                32.,
+                WHITE,
+            );
+
+            indices.extend_from_slice(&[0, current as _]);
+            continue;
+        } else {
+            indices.extend_from_slice(&[(current - 1) as _, current as _, next as _]);
+        }
+    }
+
+    // Make a triangle fan around the center.
+    // for i in 0..buffer_len {
+    //     let current = i + 1;
+    //     let next = ((i + 1) % buffer_len) + 1;
+    //
+    //     indices.extend_from_slice(&[0, current as u16, next as u16]);
+    // }
+
+    let mesh = Mesh {
+        vertices,
+        indices,
+        texture: None,
+    };
+
+    draw_mesh(&mesh);
 }
 
 fn draw_line_v(buffer: &[f32], y: f32, scale: f32, color: Color, retention: &mut Retention) {
