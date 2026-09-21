@@ -4,15 +4,16 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "npm run wasm && vite",
-    "build": "npm run wasm && tsc -b && vite build",
+    "dev": "vite",
+    "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "typecheck": "tsc -b",
-    "wasm": "cargo build --target wasm32-unknown-unknown --release && node scripts/copy-wasm.mjs"
+    "typecheck": "tsc -b"
   },
   "devDependencies": {
-    "@types/audioworklet": "^0.0.100",
     "typescript": "^7.0.2",
     "vite": "^8.3.0"
+  },
+  "dependencies": {
+    "pixi.js": "^8.21.0"
   }
 }

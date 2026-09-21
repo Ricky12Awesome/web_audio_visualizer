@@ -1,7 +1,13 @@
 # Web Audio Visualizer
 
-Rust-backed audio visualizer for web-based technologies
+Minimal PixiJS WebGPU setup.
 
-I'm making this for use in [OsuMediaPlayer](https://github.com/Ricky12Awesome/OsuMediaPlayer)
+## Development
 
-This is heavily WIP, currently this is just me testing out a some stuff
+```sh
+npm install
+npm run dev
+```
+
+The renderer is configured with `preference: ["webgpu"]`, so it does not fall
+back to WebGL. Use a browser with WebGPU support.
